@@ -1,10 +1,10 @@
 import base64
 import json
 import os
+from functools import lru_cache
 from typing import List, Literal, Optional
 
 import cv2
-import face_recognition
 import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -54,6 +54,13 @@ class CompareManyRequest(BaseModel):
 PoseLabel = Literal["straight", "left", "right"]
 
 
+@lru_cache(maxsize=1)
+def get_face_recognition():
+    import face_recognition
+
+    return face_recognition
+
+
 def read_image_from_upload(file_bytes: bytes):
     np_array = np.frombuffer(file_bytes, np.uint8)
     image_bgr = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
@@ -97,6 +104,7 @@ def read_image_from_base64(image_base64: str):
 
 
 def detect_single_face(image_rgb):
+    face_recognition = get_face_recognition()
     face_locations = face_recognition.face_locations(
         image_rgb,
         model="hog"
@@ -112,6 +120,7 @@ def detect_single_face(image_rgb):
 
 
 def extract_face_descriptor_from_image(image_rgb):
+    face_recognition = get_face_recognition()
     face_locations = detect_single_face(image_rgb)
 
     face_encodings = face_recognition.face_encodings(
@@ -138,6 +147,7 @@ def extract_face_descriptor_from_image(image_rgb):
 
 
 def estimate_face_pose(image_rgb, face_locations) -> dict:
+    face_recognition = get_face_recognition()
     landmarks_list = face_recognition.face_landmarks(
         image_rgb,
         face_locations=face_locations,
@@ -586,10 +596,11 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(os.getenv("PORT", "8000"))
+    reload_enabled = os.getenv("UVICORN_RELOAD", "").lower() in {"1", "true", "yes"}
 
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
         port=port,
-        reload=True,
+        reload=reload_enabled,
     )
